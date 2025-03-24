@@ -4,6 +4,9 @@ import (
 	"fastgo/cmd/fg-apiserver/app/options"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"io"
+	"log/slog"
+	"os"
 )
 
 var configFile string // 配置文件路径
@@ -43,6 +46,10 @@ func NewFastGOCommand() *cobra.Command {
 
 // run 是主运行逻辑，负责初始化日志、解析配置、校验选项并启动服务器.
 func run(opts *options.ServerOptions) error {
+
+	// 初始化 slog
+	initLog()
+
 	// 将 viper 中的配置解析到 opts.
 	if err := viper.Unmarshal(opts); err != nil {
 		return err
@@ -67,4 +74,65 @@ func run(opts *options.ServerOptions) error {
 	}
 
 	return server.Run()
+}
+
+// initLog 初始化全局日志实例
+func initLog() {
+	// 获取日志配置
+	// 通过viper获取配置文件中的键值
+	format := viper.GetString("log.format") // 日志格式, 支持: json、text
+	level := viper.GetString("log.level")   // 日志级别，支持：debug, info, warn, error
+	output := viper.GetString("log.output") // 日志输出路径，支持：标准输出stdout和文件
+
+	// 转换日志级别
+	var slevel slog.Level
+	switch level {
+	case "debug":
+		slevel = slog.LevelDebug
+	case "info":
+		slevel = slog.LevelInfo
+	case "warn":
+		slevel = slog.LevelWarn
+	case "error":
+		slevel = slog.LevelWarn
+	default:
+		slevel = slog.LevelInfo
+	}
+
+	// slog/log在创建Handler时提供了一个配置
+	opts := &slog.HandlerOptions{Level: slevel}
+
+	// 转换日志输出格式
+	var w io.Writer
+	var err error
+	switch output {
+	case "":
+		w = os.Stdout
+	case "stdout":
+		w = os.Stdout
+	default:
+		w, err = os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	// 转换日志格式
+	if err != nil {
+		return
+	}
+	var handler slog.Handler
+	switch format {
+	// 以json格式输出
+	case "json":
+		handler = slog.NewJSONHandler(w, opts)
+	// 以key=value
+	case "text":
+		handler = slog.NewTextHandler(w, opts)
+	default:
+		handler = slog.NewJSONHandler(w, opts)
+	}
+
+	// 设置全局的日志实例为自定义的日志实例
+	slog.SetDefault(slog.New(handler))
 }

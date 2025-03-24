@@ -3,6 +3,7 @@ package apiserver
 import (
 	genericoptions "fastgo/pkg/options"
 	"fmt"
+	"log/slog"
 )
 
 // Config 配置结构体，用于存储应用相关的配置.
@@ -23,6 +24,7 @@ func (cfg *Config) NewServer() (*Server, error) {
 
 // Run 运行应用.
 func (s *Server) Run() error {
+	slog.Info("Read MySQL host from config", "mysql.addr", s.cfg.MySQLOptions.Addr)
 	fmt.Printf("Read MySQL host from config: %s\n", s.cfg.MySQLOptions.Addr)
 	select {} //调用 select 语句，阻塞防止进程退出
 }
