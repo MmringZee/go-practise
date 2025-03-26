@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"errors"
+	mw "fastgo/internal/pkg/middleware"
 	genericoptions "fastgo/pkg/options"
 	"github.com/gin-gonic/gin"
 	"log/slog"
@@ -34,9 +35,15 @@ func (s *Server) Run() error {
 	return nil
 }
 
+// NewServer 根据配置创建服务器.
 func (cfg *Config) NewServer() (*Server, error) {
 	// 创建gin引擎.
 	engine := gin.New()
+
+	// gin.Recovery() 中间件，用来捕获任何 panic，并恢复
+	mws := []gin.HandlerFunc{gin.Recovery(), mw.NoCache, mw.Cors, mw.RequestID()}
+	// Use()函数入参接收一个可变参数, 但mws是一个切片, 切片后加...可以将其解构为多个独立参数
+	engine.Use(mws...)
 
 	// 注册 404 Handler.
 	engine.NoRoute(func(context *gin.Context) {
