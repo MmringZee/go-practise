@@ -1,12 +1,17 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
 	mw "fastgo/internal/pkg/middleware"
 	genericoptions "fastgo/pkg/options"
 	"github.com/gin-gonic/gin"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 // Config 配置结构体，用于存储应用相关的配置.
@@ -29,9 +34,39 @@ func (s *Server) Run() error {
 	//select {} //调用 select 语句，阻塞防止进程退出
 
 	slog.Info("Start to listening the incoming requests on http address", "addr", s.cfg.Addr)
-	if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	go func() {
+		// s.srv是一个http服务实例,调用方法开始监听客户端请求
+		// http.ErrServerClosed意味着服务器正常关闭
+		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error(err.Error())
+			os.Exit(1)
+		}
+	}()
+
+	// 实现优雅关闭
+	// 创建一个os.Singal类型的channel, 用于接收系统信号
+	quit := make(chan os.Signal, 1)
+	// 当执行 kill 命令时（不带参数），默认会发送 syscall.SIGTERM 信号
+	// 使用 kill -2 命令会发送 syscall.SIGINT 信号（例如按 CTRL+C 触发）
+	// 使用 kill -9 命令会发送 syscall.SIGKILL 信号，但 SIGKILL 信号无法被捕获，因此无需监听和处理
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	// 阻塞主进程, 等待从 quit channel 中接收到信号
+	<-quit
+
+	slog.Info("Shutting down server ...")
+	// 优雅关停服务
+	// 创建上下文对象 ctx, 指定超时时间
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// 先关闭依赖的服务, 再关闭被依赖的服务
+	// 10 秒内优雅关闭服务（将未处理完的请求处理完再关闭服务），超过 10 秒就超时退出
+	if err := s.srv.Shutdown(ctx); err != nil {
+		slog.Error("Insecure Server forced to shutdown", "err", err)
 		return err
 	}
+
+	// 正常关闭
+	slog.Info("Server exited")
 	return nil
 }
 
