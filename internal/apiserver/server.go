@@ -3,6 +3,8 @@ package apiserver
 import (
 	"context"
 	"errors"
+	"fastgo/internal/pkg/core"
+	"fastgo/internal/pkg/errorsx"
 	mw "fastgo/internal/pkg/middleware"
 	genericoptions "fastgo/pkg/options"
 	"github.com/gin-gonic/gin"
@@ -81,19 +83,14 @@ func (cfg *Config) NewServer() (*Server, error) {
 	engine.Use(mws...)
 
 	// 注册 404 Handler.
-	engine.NoRoute(func(context *gin.Context) {
-		context.JSON(http.StatusNotFound, gin.H{
-			"code":    "PageNotFound",
-			"message": "Page not found",
-		})
+	engine.NoRoute(func(c *gin.Context) {
+		core.WriteResponse(c, errorsx.ErrNotFound.WithMessage("Page not found"), nil)
 	})
 
 	// 注册 /healthz handler.
 	// 请求方法: GET; 请求路径: /healthz; 请求返回: {"status":"ok"}
-	engine.GET("/healthz", func(context *gin.Context) {
-		context.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
+	engine.GET("/healthz", func(c *gin.Context) {
+		core.WriteResponse(c, nil, map[string]string{"status": "ok"})
 	})
 
 	// 创建 HTTP Server 实例.
