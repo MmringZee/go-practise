@@ -1,7 +1,7 @@
 package rid
 
 import (
-	"fastgo/internal/pkg/id"
+	"fastgo/pkg/id"
 )
 
 const defaultABC = "abcdefghijklmnopqrstuvwxyz1234567890"

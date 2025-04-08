@@ -3,7 +3,6 @@ package errorsx
 import (
 	"errors"
 	"fmt"
-	"net/http"
 )
 
 // ErrorX 定义了 fastgo 项目体系中使用的错误类型，用于描述错误的详细信息.
@@ -15,18 +14,6 @@ type ErrorX struct {
 	// Message 表示简短的错误信息，通常可直接暴露给用户查看.
 	Message string `json:"message,omitempty"`
 }
-
-// errorsx 预定义标准的错误.
-var (
-	// OK 代表请求成功.
-	OK = &ErrorX{Code: http.StatusOK, Message: ""}
-
-	// ErrInternal 表示所有未知的服务器端错误.
-	ErrInternal = &ErrorX{Code: http.StatusInternalServerError, Reason: "InternalError", Message: "Internal server error."}
-
-	// ErrNotFound 表示资源未找到.
-	ErrNotFound = &ErrorX{Code: http.StatusNotFound, Reason: "NotFound", Message: "Resource not found."}
-)
 
 // Error 实现 error 接口中的 `Error` 方法.
 func (err *ErrorX) Error() string {
