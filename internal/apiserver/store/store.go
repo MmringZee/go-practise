@@ -28,7 +28,7 @@ type IStore interface {
 // 一个空结构, 类似于Java用一个Object类作为锁的实体
 type transactionKey struct{}
 
-// datastore 是 IStore 的具体实现.
+// datastore 是 IStore 的一个具体实现.
 type datastore struct {
 	core *gorm.DB
 
