@@ -6,8 +6,11 @@ import (
 	"fastgo/internal/apiserver/pkg/conversion"
 	"fastgo/internal/apiserver/store"
 	"fastgo/internal/pkg/contextx"
+	"fastgo/internal/pkg/errorsx"
 	"fastgo/internal/pkg/known"
 	where "fastgo/pkg/store"
+	"fastgo/pkg/token"
+	"github.com/onexstack/onexstack/pkg/authn"
 	"log/slog"
 	"sync"
 
@@ -32,6 +35,9 @@ type UserBiz interface {
 
 // 定义用户操作的扩展方法.
 type UserExpansion interface {
+	Login(ctx context.Context, rq *apiv1.LoginRequest) (*apiv1.LoginResponse, error)
+	RefreshToken(ctx context.Context, rq *apiv1.RefreshTokenRequest) (*apiv1.RefreshTokenResponse, error)
+	ChangePassword(ctx context.Context, rq *apiv1.ChangePasswordRequest) (*apiv1.ChangePasswordResponse, error)
 }
 
 // userBiz 是 UserBiz 接口的具体实现
@@ -170,4 +176,65 @@ func (b *userBiz) Get(ctx context.Context, rq *apiv1.GetUserRequest) (*apiv1.Get
 	}
 
 	return &apiv1.GetUserResponse{User: conversion.UserodelToUserV1(userModel)}, nil
+}
+
+// Login 实现 UserBiz 接口的 Login 方法.
+// 用户登录时调用此方法.
+func (b *userBiz) Login(ctx context.Context, rq *apiv1.LoginRequest) (*apiv1.LoginResponse, error) {
+	// 获取用户登录信息
+	whr := where.F("username", rq.Username)
+	userModel, err := b.store.User().Get(ctx, whr)
+	if err != nil {
+		return nil, errorsx.ErrUserNotFound
+	}
+
+	// 密码校验是否匹配
+	if err := authn.Compare(userModel.Password, rq.Password); err != nil {
+		slog.ErrorContext(ctx, "密码不匹配", "err", err)
+		return nil, errorsx.ErrPasswordInvalid
+	}
+
+	// 成功登录, 签发 token 并返回
+	tokenStr, expireAt, err := token.Sign(userModel.UserID)
+	if err != nil {
+		slog.ErrorContext(ctx, "签发token失败", "err", err)
+		return nil, errorsx.ErrSignToken
+	}
+
+	return &apiv1.LoginResponse{tokenStr, expireAt}, nil
+
+}
+
+// RefreshToken 用于刷新用户的身份验证令牌.
+// 当用户的令牌即将过期时, 调用此方法可生成新的令牌
+func (b *userBiz) RefreshToken(ctx context.Context, rq *apiv1.RefreshTokenRequest) (*apiv1.RefreshTokenResponse, error) {
+	tokenStr, expireAt, err := token.Sign(contextx.UserID(ctx))
+	if err != nil {
+		return nil, errorsx.ErrSignToken.WithMessage(err.Error())
+	}
+	return &apiv1.RefreshTokenResponse{Token: tokenStr, ExpireAt: expireAt}, nil
+}
+
+// ChangePassword 实现 UserBiz 接口中的 ChangePassword 方法.
+// 用户变更密码时调用此方法.
+func (b *userBiz) ChangePassword(ctx context.Context, rq *apiv1.ChangePasswordRequest) (*apiv1.ChangePasswordResponse, error) {
+	userModel, err := b.store.User().Get(ctx, where.T(ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	// 校验旧密码
+	if err := authn.Compare(userModel.Password, rq.OldPassword); err != nil {
+		slog.ErrorContext(ctx, "密码不匹配", "err", err)
+		return nil, errorsx.ErrPasswordInvalid
+	}
+
+	// 更新密码
+	// authn.Encrypt 对密码进行加密
+	userModel.Password, _ = authn.Encrypt(rq.NewPassword)
+	if err := b.store.User().Update(ctx, userModel); err != nil {
+		return nil, err
+	}
+
+	return &apiv1.ChangePasswordResponse{}, nil
 }

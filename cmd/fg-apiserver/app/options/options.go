@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 )
 
 type ServerOptions struct {
 	MySQLOptions *genericoptions.MySQLOptions `json:"mysql" mapstructure:"mysql"`
 	Addr         string                       `json:"addr" mapstructure:"addr"`
+	// JWTKey 定义 JWT 密钥.
+	JWTKey string `json:"jwt-key" mapsturcture:"jwt-key"`
+	// Expiration 定义 JWT token 的过期时间.
+	Expiration time.Duration `json:"expiration" mapsturcture:"expiration"`
 }
 
 // NewServerOptions 创建带有默认值的 ServerOptions 实例.

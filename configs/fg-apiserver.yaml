@@ -22,3 +22,8 @@ log:
   format: text
   level: info
   output: stdout
+
+# JWT 签发密钥
+jwt-key: Rtg8BPKNEf2mB4mgvKONGPZZQSaJWNLijxR42Rgq0iBb5
+# JWT 过期时间
+expiration: 120h

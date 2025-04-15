@@ -9,7 +9,10 @@ import (
 	store2 "fastgo/internal/apiserver/store"
 	"fastgo/internal/pkg/core"
 	"fastgo/internal/pkg/errorsx"
+	"fastgo/internal/pkg/known"
+	"fastgo/internal/pkg/middleware"
 	genericoptions "fastgo/pkg/options"
+	"fastgo/pkg/token"
 	"github.com/gin-gonic/gin"
 	"log/slog"
 	"net/http"
@@ -24,6 +27,8 @@ import (
 type Config struct {
 	MySQLOptions *genericoptions.MySQLOptions
 	Addr         string
+	JWTKey       string
+	Expiration   time.Duration
 }
 
 // Server 定义一个服务器结构体类型.
@@ -88,6 +93,9 @@ func (cfg *Config) NewServer() (*Server, error) {
 	store := store2.NewStore(db)
 	cfg.InstallRESTAPI(engine, store)
 
+	// 初始化 token 包的签名密钥、认证 key 和 Token 默认超时时间
+	token.Init(cfg.JWTKey, known.XUserID, cfg.Expiration)
+
 	//// gin.Recovery() 中间件，用来捕获任何 panic，并恢复
 	//mws := []gin.HandlerFunc{gin.Recovery(), mw.NoCache, mw.Cors, mw.RequestID()}
 	//// Use()函数入参接收一个可变参数, 但mws是一个切片, 切片后加...可以将其解构为多个独立参数
@@ -126,9 +134,16 @@ func (cfg *Config) InstallRESTAPI(engine *gin.Engine, store store2.IStore) {
 	// 创建业务处理器Handler
 	handler := handler.NewHandler(biz.NewBiz(store), validation.NewValidator(store))
 
+	// 注册用户登录和令牌刷新接口
+	engine.POST("/login", handler.Login)
+	// 刷新令牌, 延长令牌有效时间
+	// 需要注意, 先进行令牌有效性的验证, 再刷新令牌
+	engine.PUT("/refresh-token", middleware.Authn(), handler.RefreshToken)
+
 	// gin.HandlerFunc类型的切片
 	// 是用来处理HTTP请求的函数类型, 作用是为路由分组添加中间件.
-	authMiddlewares := []gin.HandlerFunc{AuthMiddleware()}
+	// authMiddlewares := []gin.HandlerFunc{AuthMiddleware()}
+	authMiddlewares := []gin.HandlerFunc{middleware.Authn()}
 
 	// 注册 v1 版本 API 路由分组
 	v1 := engine.Group("/v1")
@@ -136,7 +151,9 @@ func (cfg *Config) InstallRESTAPI(engine *gin.Engine, store store2.IStore) {
 		// 用户模块相关路由
 		userv1 := v1.Group("/users")
 		{
-			userv1.POST("", handler.CreateUser) // 创建用户
+			userv1.POST("", handler.CreateUser)                           // 创建用户
+			userv1.Use(authMiddlewares...)                                // 进行
+			userv1.PUT(":userID/change-password", handler.ChangePassword) // 修改密码
 			// 更新用户信息
 			// 删除用户
 			// 查询用户详情
@@ -144,7 +161,7 @@ func (cfg *Config) InstallRESTAPI(engine *gin.Engine, store store2.IStore) {
 		}
 		// 博客模块相关路由
 		// 所有以/v1/posts开头的路由都会先经过authMiddlewares里的中间件处理. 只有通过了身份验证中间件的验证, 请求才会被转发到对应的处理函数.
-		postv1 := v1.Group("/posts", authMiddlewares...)
+		// postv1 := v1.Group("/posts", authMiddlewares...)
 		{
 			// 创建博客
 			// 更新博客
